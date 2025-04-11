@@ -145,4 +145,23 @@ impl ClientThread {
 
         Ok(())
     });
+
+    gs_handler!(self, handle_motd_request, RequestMotdPacket, packet, {
+        let _ = gs_needauth!(self);
+
+        let res = {
+            let conf = self.game_server.bridge.central_conf.lock();
+            if (conf.motd.is_empty() || conf.motd_hash.eq_ignore_ascii_case(packet.motd_hash.try_to_str())) && !packet.expect_response {
+                None
+            } else {
+                Some((conf.motd.clone(), conf.motd_hash.clone()))
+            }
+        };
+
+        if let Some((motd, motd_hash)) = res {
+            self.send_packet_dynamic(&MotdResponsePacket { motd, motd_hash }).await?;
+        }
+
+        Ok(())
+    });
 }

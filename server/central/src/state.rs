@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    fs::read_to_string,
     hash::{DefaultHasher, Hash, Hasher},
     net::IpAddr,
     path::PathBuf,
@@ -54,6 +55,7 @@ pub struct ServerStateData {
     pub challenge_box: XSalsa20Poly1305,
     pub http_client: reqwest::Client,
     pub last_logins: HashMap<u64, LoginEntry>, // { hash of lowercase username : entry }
+    pub motd: String,
 }
 
 impl ServerStateData {
@@ -74,6 +76,12 @@ impl ServerStateData {
             .build()
             .unwrap();
 
+        let motd = if config.motd_path.is_empty() {
+            String::new()
+        } else {
+            read_to_string(&config.motd_path).expect("unable to read the motd file")
+        };
+
         Self {
             config_path,
             config,
@@ -84,6 +92,7 @@ impl ServerStateData {
             challenge_box,
             http_client,
             last_logins: HashMap::new(),
+            motd,
         }
     }
 

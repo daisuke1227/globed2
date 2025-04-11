@@ -16,16 +16,20 @@
 #include <managers/admin.hpp>
 #include <managers/error_queues.hpp>
 #include <managers/game_server.hpp>
+#include <managers/central_server.hpp>
 #include <managers/profile_cache.hpp>
 #include <managers/popup_queue.hpp>
 #include <managers/friend_list.hpp>
 #include <managers/settings.hpp>
 #include <managers/room.hpp>
 #include <managers/role.hpp>
+#include <managers/motd_cache.hpp>
 #include <util/cocos.hpp>
+#include <util/crypto.hpp>
 #include <util/format.hpp>
 #include <util/time.hpp>
 #include <util/net.hpp>
+#include <util/ui.hpp>
 #include <ui/menu/admin/user_punishment_popup.hpp>
 #include <ui/notification/panel.hpp>
 
@@ -605,7 +609,7 @@ protected:
             ErrorQueues::get().error(fmt::format("Failed to join room: {}", reason));
         });
 
-        G_WC(_se, G_WC(cu, re)) = ::G_WC(G_WC(b, b), G_WC(_, G_WC(i, G_WC(n, G_WC(i, t)))))();
+        _secure = ::bb_init();
 
         // Admin packets
 
@@ -640,6 +644,21 @@ protected:
             );
 
             alert->show();
+        });
+
+        addGlobalListener<MotdResponsePacket>([](auto packet) {
+            auto& mcm = MotdCacheManager::get();
+            mcm.insertActive(packet->motd, packet->motdHash);
+
+            if (packet->motd.empty()) return;
+
+            // show the message of the day
+            util::ui::showMotd(packet->motd);
+
+            auto lastSeenMotdKey = CentralServerManager::get().getMotdKey();
+            if (!lastSeenMotdKey.empty()) {
+                Mod::get()->setSavedValue(lastSeenMotdKey, packet->motdHash);
+            }
         });
     }
 
@@ -731,6 +750,17 @@ protected:
             if (password.has_value()) {
                 GlobedAccountManager::get().storeTempAdminPassword(password.value());
                 this->send(AdminAuthPacket::create(password.value()));
+            }
+        }
+
+        // request the motd of the server if uncached
+        auto& mcm = MotdCacheManager::get();
+        auto motd = mcm.getCurrentMotd();
+
+        if (!motd) {
+            auto lastSeenMotdKey = CentralServerManager::get().getMotdKey();
+            if (!lastSeenMotdKey.empty()) {
+                this->send(RequestMotdPacket::create(Mod::get()->getSavedValue<std::string>(lastSeenMotdKey, ""), false));
             }
         }
     }
